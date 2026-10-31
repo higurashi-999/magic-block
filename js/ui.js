@@ -138,26 +138,31 @@
     renderSelect();
   }
 
-  function takenStudents() {
-    return Object.keys(sel.choices).map(function (k) { return sel.choices[k].student; }).filter(Boolean);
+  /* exceptSeat の席の選択は数えない（その席を選択し直すときに使う） */
+  function takenStudents(exceptSeat) {
+    return Object.keys(sel.choices).filter(function (k) { return Number(k) !== exceptSeat; })
+      .map(function (k) { return sel.choices[k].student; }).filter(Boolean);
   }
-  function takenPartners() {
-    return Object.keys(sel.choices).map(function (k) { return sel.choices[k].partner; }).filter(Boolean);
+  function takenPartners(exceptSeat) {
+    return Object.keys(sel.choices).filter(function (k) { return Number(k) !== exceptSeat; })
+      .map(function (k) { return sel.choices[k].partner; }).filter(Boolean);
   }
   function seatName(i) { return setup.seats[i].nameInput.value || ('プレイヤー' + (i + 1)); }
 
-  /* 2人戦：先に選んだ相棒の色ペアと競合しない相棒だけ選べる */
+  /* 2人戦：他の席が選んだ相棒の色ペアと競合しない相棒だけ選べる
+   * （選択し直し中は自分の席の相棒は対象から除く） */
   function partnerAllowed(partnerId) {
     if (setup.count !== 2) return true;
-    var taken = takenPartners();
-    if (taken.length === 0) return true;
-    var firstColor = State.partnerById(taken[0]).color;
+    var others = takenPartners(sel.humanSeats[sel.pos]);
+    if (others.length === 0) return true;
     var myColor = State.partnerById(partnerId).color;
-    return State.pairOf(firstColor).indexOf(myColor) < 0;
+    return others.every(function (pid) {
+      return State.pairOf(State.partnerById(pid).color).indexOf(myColor) < 0;
+    });
   }
 
-  function choiceCard(emoji, title, sub, disabled, onclick) {
-    var card = el('button', 'choice-card' + (disabled ? ' disabled' : ''));
+  function choiceCard(emoji, title, sub, disabled, onclick, selected) {
+    var card = el('button', 'choice-card' + (disabled ? ' disabled' : '') + (selected ? ' selected' : ''));
     var b = el('span', 'big-emoji', emoji);
     card.appendChild(b);
     card.appendChild(document.createTextNode(title));
@@ -167,8 +172,8 @@
   }
 
   /* 画像つき選択カード（素材が無い場合は絵文字カードと同じ見た目になる） */
-  function choiceCardImg(src, fallbackEmoji, title, sub, disabled, onclick) {
-    var card = el('button', 'choice-card' + (disabled ? ' disabled' : ''));
+  function choiceCardImg(src, fallbackEmoji, title, sub, disabled, onclick, selected) {
+    var card = el('button', 'choice-card' + (disabled ? ' disabled' : '') + (selected ? ' selected' : ''));
     var im = imgEl(src, 'choice-img', title);
     if (im) card.appendChild(im);
     else card.appendChild(el('span', 'big-emoji', fallbackEmoji));
@@ -178,6 +183,34 @@
     return card;
   }
 
+  /* ステップ内「← もどる」ボタン（選択フロー共通） */
+  function stepBackButton(onclick) {
+    var btn = el('button', 'big-btn back-nav', '← もどる');
+    btn.addEventListener('click', onclick);
+    return btn;
+  }
+
+  /* 選択フローで1つ前へ戻る：
+   * partner → student → gender →（前のプレイヤーの partner）…→ 設定画面。
+   * 戻っても各席の確定済み選択は保持され、該当ステップでハイライトされる。 */
+  function selectBack() {
+    if (sel.step === 'partner') {
+      sel.step = 'student';
+    } else if (sel.step === 'student') {
+      sel.step = 'gender';
+    } else if (sel.pos > 0) {
+      sel.pos--;
+      var seatIdx = sel.humanSeats[sel.pos];
+      var ch = sel.choices[seatIdx];
+      sel.gender = ch && ch.student ? State.studentById(ch.student).gender : null;
+      sel.step = ch && ch.student ? 'partner' : 'gender';
+    } else {
+      showScreen('screen-setup');
+      return;
+    }
+    renderSelect();
+  }
+
   function renderSelect() {
     var seatIdx = sel.humanSeats[sel.pos];
     var body = $('select-body');
@@ -185,21 +218,23 @@
     $('select-title').textContent = 'キャラ選択（' + seatName(seatIdx) + 'さん）';
     $('select-progress').textContent =
       '人間プレイヤー ' + (sel.pos + 1) + ' / ' + sel.humanSeats.length + ' 人目';
+    $('btn-select-back').textContent = '設定にもどる';
+    var mine = sel.choices[seatIdx] || null;
 
     if (sel.step === 'gender') {
       body.appendChild(el('div', 'step-title', '性別をえらんでね'));
       var grid = el('div', 'choice-grid');
       grid.appendChild(choiceCard('👦', 'おとこのこ', null, false, function () {
         sel.gender = 'male'; sel.step = 'student'; renderSelect();
-      }));
+      }, sel.gender === 'male'));
       grid.appendChild(choiceCard('👧', 'おんなのこ', null, false, function () {
         sel.gender = 'female'; sel.step = 'student'; renderSelect();
-      }));
+      }, sel.gender === 'female'));
       body.appendChild(grid);
     } else if (sel.step === 'student') {
       body.appendChild(el('div', 'step-title', '生徒をえらんでね'));
       var grid2 = el('div', 'choice-grid');
-      var taken = takenStudents();
+      var taken = takenStudents(seatIdx);
       State.STUDENTS.filter(function (s) { return s.gender === sel.gender; }).forEach(function (stu) {
         var forms = '普通の学校：' + stu.emoji + ' ／ 魔法学校：' + stu.wizardEmoji;
         grid2.appendChild(choiceCardImg(
@@ -207,21 +242,23 @@
           setup.mode === 'wizard' ? stu.wizardEmoji : stu.emoji,
           stu.name, forms, taken.indexOf(stu.id) >= 0,
           function () {
-            sel.choices[seatIdx] = { student: stu.id, partner: null };
+            /* 選び直しでも相棒の選択は保持する（次のステップで直せる） */
+            var prev = sel.choices[seatIdx];
+            sel.choices[seatIdx] = { student: stu.id, partner: prev ? prev.partner : null };
             sel.step = 'partner'; renderSelect();
-          }));
+          }, !!(mine && mine.student === stu.id)));
       });
       body.appendChild(grid2);
     } else if (sel.step === 'partner') {
       body.appendChild(el('div', 'step-title', '相棒をえらんでね（色が決まるよ）'));
       var grid3 = el('div', 'choice-grid');
-      var takenP = takenPartners();
+      var takenP = takenPartners(seatIdx);
       State.PARTNERS.forEach(function (pt) {
         var disabled = takenP.indexOf(pt.id) >= 0 || !partnerAllowed(pt.id);
         var card = choiceCardImg(partnerSrc(pt.id), pt.emoji, pt.name, null, disabled, function () {
           sel.choices[seatIdx].partner = pt.id;
           nextSelectSeat();
-        });
+        }, !!(mine && mine.partner === pt.id));
         var chip = el('span', 'color-chip dot-' + pt.color);
         card.insertBefore(chip, card.childNodes[1]);
         card.appendChild(el('span', 'forms', COLOR_NAMES[pt.color] + 'のピース担当'));
@@ -229,17 +266,21 @@
       });
       body.appendChild(grid3);
     }
+    body.appendChild(stepBackButton(selectBack));
   }
 
   function nextSelectSeat() {
     sel.pos++;
-    sel.step = 'gender';
-    sel.gender = null;
     if (sel.pos >= sel.humanSeats.length) {
       finishSelectAndStart();
-    } else {
-      renderSelect();
+      return;
     }
+    /* 次の席に確定済みの選択があれば、性別ステップで保持ハイライトできるよう復元する */
+    var seatIdx = sel.humanSeats[sel.pos];
+    var ch = sel.choices[seatIdx];
+    sel.step = 'gender';
+    sel.gender = ch && ch.student ? State.studentById(ch.student).gender : null;
+    renderSelect();
   }
 
   /* CPU席のキャラ・相棒を自動割当してゲーム開始 */
@@ -464,6 +505,7 @@
 
   function leaveOnline(notifyHost) {
     if (hostPumpTimer) { clearTimeout(hostPumpTimer); hostPumpTimer = null; }
+    osel = null; // 部屋を離れたら選択途中の内容は破棄する
     if (!online) return;
     var o = online;
     online = null;
@@ -548,9 +590,25 @@
 
   /* --- オンライン用キャラ選択（自分1人分） --- */
   function startOnlineSelect() {
-    osel = { step: 'gender', gender: null, student: null, partner: null };
+    /* 途中でロビーへ戻っても、確定前なら選択の続きから再開できるよう保持する */
+    if (!osel) osel = { step: 'gender', gender: null, student: null, partner: null };
     showScreen('screen-select');
     renderOnlineSelect();
+  }
+
+  /* オンライン選択で1つ前へ戻る：partner → student → gender → ロビー。
+   * ロビーへ戻っても osel は保持され、「キャラ・相棒を選ぶ」から続きを直せる。 */
+  function onlineSelectBack() {
+    if (osel && osel.step === 'partner') {
+      osel.step = 'student';
+      renderOnlineSelect();
+    } else if (osel && osel.step === 'student') {
+      osel.step = 'gender';
+      renderOnlineSelect();
+    } else {
+      showScreen('screen-lobby');
+      renderLobby();
+    }
   }
   function onlineTakenStudents() {
     if (!online || !online.lobby) return [];
@@ -577,15 +635,16 @@
     body.innerHTML = '';
     $('select-title').textContent = 'キャラ選択（' + online.name + 'さん）';
     $('select-progress').textContent = 'オンライン対戦：自分のキャラと相棒を選んでね';
+    $('btn-select-back').textContent = 'ロビーにもどる';
     if (osel.step === 'gender') {
       body.appendChild(el('div', 'step-title', '性別をえらんでね'));
       var grid = el('div', 'choice-grid');
       grid.appendChild(choiceCard('👦', 'おとこのこ', null, false, function () {
         osel.gender = 'male'; osel.step = 'student'; renderOnlineSelect();
-      }));
+      }, osel.gender === 'male'));
       grid.appendChild(choiceCard('👧', 'おんなのこ', null, false, function () {
         osel.gender = 'female'; osel.step = 'student'; renderOnlineSelect();
-      }));
+      }, osel.gender === 'female'));
       body.appendChild(grid);
     } else if (osel.step === 'student') {
       body.appendChild(el('div', 'step-title', '生徒をえらんでね'));
@@ -597,7 +656,7 @@
           stu.name, forms, taken.indexOf(stu.id) >= 0,
           function () {
             osel.student = stu.id; osel.step = 'partner'; renderOnlineSelect();
-          }));
+          }, osel.student === stu.id));
       });
       body.appendChild(grid2);
     } else if (osel.step === 'partner') {
@@ -609,7 +668,7 @@
         var card = choiceCardImg(partnerSrc(pt.id), pt.emoji, pt.name, null, disabled, function () {
           osel.partner = pt.id;
           submitOnlineDeclare();
-        });
+        }, osel.partner === pt.id);
         var chip = el('span', 'color-chip dot-' + pt.color);
         card.insertBefore(chip, card.childNodes[1]);
         card.appendChild(el('span', 'forms', COLOR_NAMES[pt.color] + 'のピース担当'));
@@ -617,6 +676,7 @@
       });
       body.appendChild(grid3);
     }
+    body.appendChild(stepBackButton(onlineSelectBack));
   }
   function submitOnlineDeclare() {
     if (!online || !osel) return;
@@ -1329,7 +1389,8 @@
     $('btn-setup-back').addEventListener('click', function () { showScreen('screen-home'); });
     $('btn-to-select').addEventListener('click', startSelect);
     $('btn-select-back').addEventListener('click', function () {
-      if (online) { osel = null; showScreen('screen-lobby'); renderLobby(); return; }
+      /* オンライン：選択途中の内容（osel）は保持し、ロビーから続きを直せるようにする */
+      if (online) { showScreen('screen-lobby'); renderLobby(); return; }
       showScreen('screen-setup');
     });
     $('board').addEventListener('click', onBoardClick);
