@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>マジック・ブロック</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="theme-normal">
+<header class="app-header">
+  <div class="logo">🪄 マジック・ブロック</div>
+  <a class="manual-link" href="manual.html" target="_blank" rel="noopener">📖 マニュアル</a>
+</header>
+
+<main>
+  <!-- ホーム -->
+  <section id="screen-home" class="screen">
+    <div class="title-card">
+      <div class="title-emoji">🏫✨🧙</div>
+      <h1>マジック・ブロック</h1>
+      <p class="tagline">角と角をつなげて陣地を広げる、<br>ドタバタ魔法学園の陣取りゲーム！</p>
+      <div class="mascot-row"><span>🦁</span><span>🦡</span><span>🦅</span><span>🐍</span></div>
+    </div>
+    <button id="btn-show-setup" class="big-btn primary">🤖 CPUと対戦</button>
+    <button class="big-btn" disabled>🌐 オンライン対戦<span class="badge">準備中</span></button>
+    <a class="big-btn link-btn" href="manual.html" target="_blank" rel="noopener">📖 遊び方マニュアル</a>
+    <p class="note">オンライン対戦は次のアップデートで登場予定。いまは1台でCPUや友達と交代しながら遊べるよ。</p>
+  </section>
+
+  <!-- 対戦設定 -->
+  <section id="screen-setup" class="screen" hidden>
+    <h2>対戦の設定</h2>
+    <div class="field">
+      <label>プレイヤー数</label>
+      <div class="seg" id="seg-count">
+        <button data-v="2">2人</button>
+        <button data-v="3">3人</button>
+        <button data-v="4" class="on">4人</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>モード</label>
+      <div class="seg" id="seg-mode">
+        <button data-v="normal" class="on">🏫 通常モード</button>
+        <button data-v="wizard">🧙 魔法使いモード</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>CPUのつよさ</label>
+      <div class="seg" id="seg-level">
+        <button data-v="1">よわい</button>
+        <button data-v="2" class="on">ふつう</button>
+        <button data-v="3">つよい</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>参加メンバー</label>
+      <div id="seat-list"></div>
+      <p class="note">「人間」にすると、この端末で交代しながら操作できるよ。</p>
+    </div>
+    <button id="btn-to-select" class="big-btn primary">キャラ選択へ ▶</button>
+    <button id="btn-setup-back" class="big-btn">もどる</button>
+  </section>
+
+  <!-- キャラ選択 -->
+  <section id="screen-select" class="screen" hidden>
+    <h2 id="select-title">キャラ選択</h2>
+    <p id="select-progress" class="note"></p>
+    <div id="select-body"></div>
+    <button id="btn-select-back" class="big-btn">設定にもどる</button>
+  </section>
+
+  <!-- 対戦 -->
+  <section id="screen-game" class="screen" hidden>
+    <div id="turn-banner"></div>
+    <div id="players-strip"></div>
+    <div id="board-wrap"><div id="board"></div></div>
+    <div id="cards-area"></div>
+    <div id="target-area" hidden></div>
+    <div id="hand-area">
+      <div id="hand-title"></div>
+      <div id="hand-pieces"></div>
+      <div id="piece-controls" hidden>
+        <button id="btn-rotate">↻ 回転</button>
+        <button id="btn-flip">⇋ 反転</button>
+        <button id="btn-confirm" class="primary">✔ 決定</button>
+        <button id="btn-cancel">やめる</button>
+      </div>
+    </div>
+    <div id="turn-actions">
+      <button id="btn-pass">パスする</button>
+      <span id="msg"></span>
+    </div>
+    <div id="log"></div>
+    <button id="btn-quit" class="big-btn">対戦をやめてホームへ</button>
+  </section>
+
+  <!-- 結果 -->
+  <section id="screen-result" class="screen" hidden>
+    <h2>🎉 結果発表</h2>
+    <div id="winner-banner"></div>
+    <div id="result-table"></div>
+    <button id="btn-rematch" class="big-btn primary">🔁 同じメンバーでもう一度</button>
+    <button id="btn-home" class="big-btn">ホームへ</button>
+  </section>
+</main>
+
+<footer>
+  <p>build 2026-10-31.2</p>
+  <p class="fanmade">※本作品は非公式のファンメイド作品です。原作『ブロックス』（Mattel）および『ブロックスシャッフル ポケモンエディション』のルールを参考にし、名称・デザインは独自のものに置き換えています。</p>
+</footer>
+
+<script src="js/pieces.js"></script>
+<script src="js/logic.js"></script>
+<script src="js/state.js"></script>
+<script src="js/cpu.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

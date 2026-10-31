@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>遊び方マニュアル｜マジック・ブロック</title>
+<style>
+  body { font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", sans-serif;
+         background: linear-gradient(180deg, #bfe7ff, #fff7d6); color: #33354d; margin: 0; }
+  main { max-width: 640px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { text-align: center; font-size: 26px; }
+  h2 { background: #6a5cff; color: #fff; border-radius: 12px; padding: 8px 14px; font-size: 19px; margin-top: 30px; }
+  h3 { border-left: 6px solid #ff5f8f; padding-left: 10px; margin-top: 22px; }
+  section { background: rgba(255,255,255,.92); border-radius: 16px; padding: 6px 18px 14px; margin: 12px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 10px 0; }
+  th, td { border: 1px solid #d6d9f2; padding: 7px 8px; text-align: left; vertical-align: top; }
+  th { background: #eef0ff; }
+  li, p { line-height: 1.8; font-size: 14.5px; }
+  .point { background: #fff6d8; border-radius: 10px; padding: 8px 12px; font-weight: 700; }
+  .credit { font-size: 12px; opacity: .8; text-align: center; margin-top: 30px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🪄 マジック・ブロック<br>遊び方マニュアル</h1>
+
+  <section>
+    <h2>ゲームの概要</h2>
+    <p>20×20マスのボードに、自分の色のピース（全21個・1〜5マス）を順番に置いていく陣取りゲームです。プレイヤーは生徒キャラと相棒（ライオン＝赤／アナグマ＝黄／ワシ＝青／ヘビ＝緑）を選び、相棒で自分の色が決まります。置く順番は <strong>青 → 黄 → 赤 → 緑</strong> の固定です。</p>
+    <h3>配置の基本ルール（両モード共通）</h3>
+    <ul>
+      <li><strong>最初のピース</strong>は、ボードの四隅のどれか1マスを必ず完全に覆って置きます。</li>
+      <li><strong>2手目以降</strong>は、自分の色のピースと<strong>角と角で接する</strong>ように置きます。</li>
+      <li>自分の色のピースと<strong>辺と辺でくっつけてはいけません</strong>。</li>
+      <li>他の色のピースとは、辺でも角でもどう接してもOKです。</li>
+      <li>ピースは回転・反転（裏返し）して置けます。一度置いたピースは動かせません。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>🏫 通常モード</h2>
+    <ul>
+      <li>自分の番に置ける場所がどこにもない場合は<strong>パス</strong>になります。</li>
+      <li>通常モードでは、<strong>一度パスしたら、そのゲームではもう置けません</strong>（他のプレイヤーで続けます）。</li>
+      <li>全員が置けなくなったらゲーム終了です。</li>
+    </ul>
+    <h3>得点（アドバンススコア）</h3>
+    <table>
+      <tr><th>項目</th><th>点数</th></tr>
+      <tr><td>手元に残ったピース</td><td>1マスにつき −1点</td></tr>
+      <tr><td>21個すべて置ききった</td><td>+15点</td></tr>
+      <tr><td>すべて置ききり、最後のピースが1マスだった</td><td>合計 +20点</td></tr>
+    </table>
+    <p>最も得点が高いプレイヤーの勝ちです。</p>
+  </section>
+
+  <section>
+    <h2>🧙 魔法使いモード</h2>
+    <p>通常ルールに加えて、魔法カード（各プレイヤー14枚）を使います。最初のピースを置いたら、山札からカードを2枚引いて手札にします。</p>
+    <h3>手番の進め方（2ラウンド目以降）</h3>
+    <ol>
+      <li><strong>カードを1枚出す</strong>：手札2枚から1枚選び、魔法の効果を発動します（効果を受けられないときは、出すだけでもOK）。</li>
+      <li><strong>ピースを1つ置く</strong>：基本ルール通りに配置します。カードの効果でルールが変わることがあります。</li>
+      <li><strong>カードを1枚引く</strong>：山札から1枚引き、手札を2枚に戻します（山札がなければ引きません）。</li>
+    </ol>
+    <ul>
+      <li>ピースが置けなくても、カードだけ使って手番を終えることはできます。</li>
+      <li>パスは<strong>その手番だけ</strong>です。次の自分の手番ではまた置けます。</li>
+      <li>カードが尽きてもゲームは続き、ピース配置だけを行います。</li>
+      <li>全員が置けなくなったら終了。<strong>残ったピースのマス数が一番少ない人の勝ち</strong>です（カードの残りは関係なし）。</li>
+    </ul>
+    <h3>魔法カード一覧（全8種・14枚）</h3>
+    <table>
+      <tr><th>魔法名</th><th>枚数</th><th>効果</th></tr>
+      <tr><td>ツインキャスト</td><td>2</td><td>ピースを1つ置き、そのピースと角がつながるようにもう1つ置ける</td></tr>
+      <tr><td>すやすやパウダー</td><td>2</td><td>次のプレイヤーは、自分の手番にカードを使うことができない</td></tr>
+      <tr><td>ぴたっとボンド</td><td>2</td><td>自分のピースと辺がつながるようにピースを1つ置ける</td></tr>
+      <tr><td>ミニマイズ</td><td>2</td><td>次のプレイヤーは手元の一番小さいピースを置かなければならない。そのピースが置けない場合はパスしなければならない</td></tr>
+      <tr><td>ワープゲート</td><td>2</td><td>相手のピースを1つ選び、別の場所へ移動させる。移動先は相手の他のピースの角につながる場所でなければならない</td></tr>
+      <tr><td>チョイススペル</td><td>1</td><td>次のプレイヤーが置くピースを、カードを出した人が指定できる。そのピースが置けない場合はパスしなければならない</td></tr>
+      <tr><td>リコール</td><td>2</td><td>ボード上の自分のピースを1つ手元に戻す。そのピースをこの手番に使ってもよい</td></tr>
+      <tr><td>ピースロック</td><td>1</td><td>次のプレイヤーの手元ピース1個を、カードを出した人が指定して使用不可にする。ゲーム終了時、そのピースも残りマスとして数える</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>👥 人数が少ないときの変則ルール</h2>
+    <h3>2人で遊ぶとき</h3>
+    <ul>
+      <li>1人が「青＋赤」、もう1人が「黄＋緑」の2色を担当します。順番は青→黄→赤→緑のままで、2色を交互に操作します。</li>
+      <li>同じ人が持つ2色同士でも、配置ルール上は<strong>別々の色（他人）として扱います</strong>。</li>
+      <li>通常モードの得点は、担当2色のスコアの<strong>合計</strong>で競います。</li>
+      <li>魔法使いモードでは、カードは2色分<strong>28枚を混ぜた1つの山札</strong>を使い、手札も色ごとに分けません（カードはどちらの色の手番でも使えます）。得点は担当2色のうち<strong>残りマスが多い方の色</strong>のマス数で判定し、少ない方の勝ちです。</li>
+    </ul>
+    <h3>3人で遊ぶとき</h3>
+    <ul>
+      <li>残った1色は<strong>共有のフリーピース</strong>になります。その色の番が来たら、プレイヤーが順番に交代で操作します。</li>
+      <li>フリーピースのスコアは完全に除外し、3人の個人スコアのみで競います。</li>
+      <li>魔法使いモードでフリーピースの番が来たら、カードは<strong>使わずに伏せて捨て</strong>、ピース配置だけを行います。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>💡 攻略のヒント</h2>
+    <p class="point">大きいピースから置くのが基本！ 角をたくさん作るように広げると、後半に置ける場所が増えるよ。相手の角の先をふさぐのも有効な妨害だよ。</p>
+  </section>
+
+  <p class="credit">※本作品は非公式のファンメイド作品です。<br>
+  原作クレジット：『ブロックス』『ブロックスシャッフル ポケモンエディション』（Mattel Games）のルールを参考にしています。カード名称・世界観・キャラクターは本作独自のものです。</p>
+</main>
+</body>
+</html>

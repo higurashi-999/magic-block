@@ -9,5 +9,8 @@
 ## 開発状況
 
 - 仕様： [SPEC.md](SPEC.md)
-- 土台（ピース定義・配置ルール判定・スコア計算）： `js/`（テストは `tests/`、`scripts/check.sh` で一括チェック）
-- 画面・オンライン対戦・CPUは順次実装中
+- 土台（ピース定義・配置ルール判定・スコア計算）： `js/pieces.js` / `js/logic.js`
+- 対戦ステートマシン・CPU： `js/state.js` / `js/cpu.js`
+- ローカル対戦UI（1台で最後まで遊べる）： `index.html` / `js/ui.js` / `css/style.css`、マニュアルは `manual.html`
+- テストは `tests/`、`scripts/check.sh` で一括チェック
+- オンライン対戦（PeerJS）は次のスライスで実装予定
