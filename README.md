@@ -12,6 +12,7 @@
 - 土台（ピース定義・配置ルール判定・スコア計算）： `js/pieces.js` / `js/logic.js`
 - 対戦ステートマシン・CPU： `js/state.js` / `js/cpu.js`
 - ローカル対戦UI（1台で最後まで遊べる）： `index.html` / `js/ui.js` / `css/style.css`、マニュアルは `manual.html`
+- 配置操作ヘルパー（置ける角ハイライト・候補切り替え・ダブルタップ確定の純粋関数）： `js/placeui.js`
 - テストは `tests/`、`scripts/check.sh` で一括チェック
 - オンライン対戦（PeerJS によるホスト権威P2P、ルームコード方式）： `js/net.js` / `js/session.js`
 

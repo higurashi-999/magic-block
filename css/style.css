@@ -159,6 +159,8 @@ body.theme-wizard .cell.hl { background: #ffd54f; }
 }
 .piece-btn.selected { border-color: #ff5f8f; background: #fff0f5; }
 .piece-btn.locked { opacity: .45; cursor: not-allowed; }
+.piece-btn.unplaceable { opacity: .35; filter: grayscale(1); cursor: not-allowed; }
+.piece-btn.unplaceable .psize { color: #c0392b; font-weight: 700; }
 .piece-btn .psize { font-size: 10px; color: #888; }
 .mini { display: grid; gap: 1px; }
 .mini i { width: 9px; height: 9px; border-radius: 2px; background: transparent; }

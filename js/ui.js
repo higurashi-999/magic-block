@@ -9,6 +9,7 @@
   var Logic = window.MagicLogic;
   var State = window.MagicState;
   var Cpu = window.MagicCpu;
+  var PlaceUi = window.MagicPlaceUi;
   var Net = window.MagicNet;
   var Session = window.MagicSession;
 
@@ -584,7 +585,7 @@
     } else {
       online.session.sendMove(move);
     }
-    ui.selectedPiece = null; ui.tentative = null;
+    clearPieceSelection();
     ui.targetMode = null; ui.cardIndex = null; ui.warpCtx = null;
     showMsg('');
     renderAll();
@@ -608,10 +609,17 @@
   function resetUi() {
     ui = {
       selectedPiece: null, variantIndex: 0, tentative: null,
+      activeAnchor: null, candIdx: 0,
       movesCache: null, movesKey: '',
       targetMode: null, cardIndex: null,
       warpCtx: null, warpVariant: 0
     };
+  }
+
+  /* 選択中ピース・仮置きまわりの選択状態をまとめて解除する */
+  function clearPieceSelection() {
+    ui.selectedPiece = null; ui.tentative = null; ui.variantIndex = 0;
+    ui.activeAnchor = null; ui.candIdx = 0;
   }
 
   function startGame(players) {
@@ -754,16 +762,16 @@
     });
   }
 
-  /* ハイライト対象マップ（originKey -> move）を作る */
-  function selectedMoves() {
+  /* ハイライト対象マップ（アンカーキー -> その角を覆う候補の配列）を作る。
+   * 黄色表示は「四隅（初手）」と「自分の色に角で接するマス」のうち、
+   * 選択中ピースを実際に置ける配置が覆うマスだけに絞る。 */
+  function currentAnchors() {
     if (!ui.selectedPiece) return {};
-    var map = {};
-    legalMovesCached().forEach(function (m) {
-      if (m.pieceId === ui.selectedPiece && m.variantIndex === ui.variantIndex) {
-        map[m.origin[0] + ',' + m.origin[1]] = m;
-      }
+    return PlaceUi.buildAnchorMap(legalMovesCached(), game.board, game.turn.color, {
+      pieceId: ui.selectedPiece,
+      opening: game.phase === 'opening',
+      allowEdge: game.turn.allowEdge
     });
-    return map;
   }
   function warpDestMoves() {
     if (!ui.warpCtx) return [];
@@ -780,7 +788,7 @@
     var hl = {};
     var tentCells = {};
     if (isHumanTurn() && !ui.targetMode && game.turn.step === 'place') {
-      hl = selectedMoves();
+      hl = currentAnchors();
     }
     if (ui.tentative) {
       ui.tentative.cells.forEach(function (c) { tentCells[c[0] + ',' + c[1]] = true; });
@@ -807,9 +815,9 @@
     }
   }
 
-  function miniPiece(pieceId, color) {
+  function miniPiece(pieceId, color, variantIndex) {
     var piece = Pieces.getPiece(pieceId);
-    var variants = piece.variants[0];
+    var variants = piece.variants[variantIndex || 0] || piece.variants[0];
     var maxX = Math.max.apply(null, variants.map(function (c) { return c[0]; }));
     var maxY = Math.max.apply(null, variants.map(function (c) { return c[1]; }));
     var grid = el('div', 'mini');
@@ -836,19 +844,38 @@
     $('hand-title').textContent = '手持ちピース（' + COLOR_NAMES[color] + '）残り ' +
       Logic.remainingSquares(game.hands[color]) + 'マス';
     var humanPlace = isHumanTurn() && game.turn.step === 'place' && !ui.targetMode;
+    /*
+     * 置けないピースのグレーアウト判定について（安全側の扱い）：
+     * 配置ステップ（step === 'place'）では、その手番に効く効果（カード封じ・
+     * 強制指定・ぴたっとボンド・ツイン2個目など）はすべて state.turn に反映
+     * 済みなので、legalMovesForTurn の合法手をピース単位に集計すれば正確に
+     * 「絶対に置けないピース」を判定できる。
+     * 一方カードステップ（step === 'card'）では、ぴたっとボンドやツインで
+     * 置けるようになる可能性や、リコールで手持ち自体が変わる可能性があるため、
+     * 通常ルール基準でグレーアウトすると誤表示になる。よってカードステップ中は
+     * グレーアウトしない。
+     */
+    var placeable = (isHumanTurn() && game.turn.step === 'place' && !ui.targetMode)
+      ? PlaceUi.placeablePieceIds(legalMovesCached())
+      : null;
     // 大きい順に表示
     var sorted = usable.slice().sort(function (a, b) {
       return Pieces.getPiece(b).size - Pieces.getPiece(a).size;
     });
     sorted.forEach(function (pid) {
-      var btn = el('button', 'piece-btn' + (ui.selectedPiece === pid ? ' selected' : ''));
-      btn.appendChild(miniPiece(pid, color));
-      btn.appendChild(el('span', 'psize', Pieces.getPiece(pid).size + 'マス'));
-      if (humanPlace) {
+      var canPlace = !placeable || !!placeable[pid];
+      var btn = el('button', 'piece-btn' + (ui.selectedPiece === pid ? ' selected' : '') +
+        (canPlace ? '' : ' unplaceable'));
+      // 選択中ピースのプレビューは現在の向き（回転・反転）を反映する
+      btn.appendChild(miniPiece(pid, color, ui.selectedPiece === pid ? ui.variantIndex : 0));
+      btn.appendChild(el('span', 'psize', canPlace ? Pieces.getPiece(pid).size + 'マス' : '置けない'));
+      if (humanPlace && canPlace) {
         btn.addEventListener('click', function () {
           ui.selectedPiece = pid;
           ui.variantIndex = 0;
           ui.tentative = null;
+          ui.activeAnchor = null;
+          ui.candIdx = 0;
           renderAll();
         });
       } else {
@@ -991,8 +1018,8 @@
     var r = State.applyMove(game, { type: 'playCard', cardIndex: idx, target: target });
     if (!r.ok) { showMsg(r.reason); return; }
     game = r.state;
-    ui.targetMode = null; ui.cardIndex = null;
-    ui.selectedPiece = null; ui.tentative = null; ui.warpCtx = null;
+    clearPieceSelection();
+    ui.targetMode = null; ui.cardIndex = null; ui.warpCtx = null;
     showMsg('');
     renderAll();
   }
@@ -1043,13 +1070,27 @@
     }
     if (ui.targetMode) return;
     if (game.turn.step !== 'place' || !ui.selectedPiece) return;
-    var moves = selectedMoves();
-    var m = moves[x + ',' + y];
-    if (m) {
-      ui.tentative = m;
-      showMsg('');
-      renderAll();
+    // アンカー（黄色マス）のタップで候補を仮置きし、同じ配置になる2回目の
+    // タップで確定する（ダブルタップ確定）。解決ロジックは PlaceUi.pickTap。
+    var pick = PlaceUi.pickTap({
+      anchors: currentAnchors(),
+      activeAnchor: ui.activeAnchor,
+      candIdx: ui.candIdx,
+      tentative: ui.tentative,
+      preferredVariantIndex: ui.variantIndex,
+      x: x, y: y
+    });
+    if (!pick) return;
+    ui.tentative = pick.move;
+    ui.variantIndex = pick.move.variantIndex;
+    if (pick.action === 'confirm') {
+      doConfirm();
+      return;
     }
+    ui.activeAnchor = pick.anchor;
+    ui.candIdx = pick.candIdx;
+    showMsg('');
+    renderAll();
   }
 
   function doConfirm() {
@@ -1064,13 +1105,28 @@
     });
     if (!r.ok) { showMsg(r.reason); return; }
     game = r.state;
-    ui.selectedPiece = null; ui.tentative = null; ui.variantIndex = 0;
+    clearPieceSelection();
     showMsg('');
     renderAll();
   }
 
   function rotateSelected(dir) {
     if (!ui.selectedPiece) return;
+    // 仮置き中は、同じアンカー（角）を覆う候補を切り替える
+    // （回転＝次の候補／反転＝前の候補）。手持ちプレビューの向きも連動する。
+    if (ui.tentative && ui.activeAnchor) {
+      var cands = currentAnchors()[ui.activeAnchor];
+      if (cands && cands.length > 1) {
+        var idx = ui.candIdx + (dir === 'rot' ? 1 : -1);
+        idx = ((idx % cands.length) + cands.length) % cands.length;
+        ui.candIdx = idx;
+        ui.tentative = cands[idx];
+        ui.variantIndex = cands[idx].variantIndex;
+        showMsg('');
+        renderAll();
+        return;
+      }
+    }
     var piece = Pieces.getPiece(ui.selectedPiece);
     var n = piece.variants.length;
     if (dir === 'rot') {
@@ -1083,7 +1139,11 @@
         if (Pieces.cellsKey(piece.variants[i]) === flippedKey) { ui.variantIndex = i; break; }
       }
     }
+    // 向きを変えたら仮置きは解除する（新しい向きは手持ちプレビューに反映され、
+    // 次にアンカーをタップしたとき、その向きの候補が優先表示される）
     ui.tentative = null;
+    ui.activeAnchor = null;
+    ui.candIdx = 0;
     renderAll();
   }
 
@@ -1106,7 +1166,8 @@
         if (!r.ok) return;
       }
       game = r.state;
-      ui.selectedPiece = null; ui.tentative = null; ui.targetMode = null;
+      clearPieceSelection();
+      ui.targetMode = null;
       renderAll();
     }, 550);
   }
@@ -1189,7 +1250,8 @@
     $('board').addEventListener('click', onBoardClick);
     $('btn-confirm').addEventListener('click', doConfirm);
     $('btn-cancel').addEventListener('click', function () {
-      ui.tentative = null; ui.selectedPiece = null; renderAll();
+      clearPieceSelection();
+      renderAll();
     });
     $('btn-rotate').addEventListener('click', function () {
       if (ui.targetMode === 'warpDest') return; // ワープ用は対象エリアのボタンを使う
@@ -1201,7 +1263,7 @@
       var r = State.applyMove(game, { type: 'pass' });
       if (!r.ok) { showMsg(r.reason); return; }
       game = r.state;
-      ui.selectedPiece = null; ui.tentative = null;
+      clearPieceSelection();
       showMsg('');
       renderAll();
     });
