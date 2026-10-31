@@ -22,9 +22,69 @@
       <div class="mascot-row"><span>🦁</span><span>🦡</span><span>🦅</span><span>🐍</span></div>
     </div>
     <button id="btn-show-setup" class="big-btn primary">🤖 CPUと対戦</button>
-    <button class="big-btn" disabled>🌐 オンライン対戦<span class="badge">準備中</span></button>
+    <button id="btn-show-online" class="big-btn">🌐 オンライン対戦</button>
     <a class="big-btn link-btn" href="manual.html" target="_blank" rel="noopener">📖 遊び方マニュアル</a>
-    <p class="note">オンライン対戦は次のアップデートで登場予定。いまは1台でCPUや友達と交代しながら遊べるよ。</p>
+    <p class="note">オンライン対戦はルームコードで友達と遊べるよ。部屋はホストが開いている間だけ存在するよ。</p>
+  </section>
+
+  <!-- オンライン：作成／参加 -->
+  <section id="screen-online" class="screen" hidden>
+    <h2>🌐 オンライン対戦</h2>
+    <div class="field">
+      <label>あなたの名前</label>
+      <input type="text" id="online-name" maxlength="10" placeholder="名前を入力">
+    </div>
+    <div class="field">
+      <label>部屋を作る</label>
+      <button id="btn-create-room" class="big-btn primary">🏠 部屋を作る</button>
+      <p class="note">作るとルームコードが発行されるよ。友達にコードを教えてね。</p>
+    </div>
+    <div class="field">
+      <label>部屋に参加する</label>
+      <input type="text" id="online-code" maxlength="6" placeholder="ルームコード（4〜6文字）" class="code-input">
+      <button id="btn-join-room" class="big-btn">🚪 コードで参加する</button>
+    </div>
+    <p id="online-status" class="note"></p>
+    <button id="btn-online-back" class="big-btn">もどる</button>
+  </section>
+
+  <!-- オンライン：ロビー -->
+  <section id="screen-lobby" class="screen" hidden>
+    <h2>🏠 オンラインロビー</h2>
+    <div class="field" style="text-align:center">
+      <div>ルームコード</div>
+      <div id="lobby-code" class="room-code">-----</div>
+      <p class="note" id="lobby-phase-note">友達にコードを教えて、集まるのを待ってね。</p>
+    </div>
+    <div class="field">
+      <label>参加メンバー</label>
+      <div id="lobby-members"></div>
+    </div>
+    <div class="field" id="lobby-host-controls" hidden>
+      <label>ホスト操作</label>
+      <div id="lobby-cpu-row">
+        <div class="seg" id="seg-cpu-level">
+          <button data-v="1">CPU よわい</button>
+          <button data-v="2" class="on">CPU ふつう</button>
+          <button data-v="3">CPU つよい</button>
+        </div>
+        <button id="btn-add-cpu" class="big-btn">🤖 CPUを追加</button>
+      </div>
+      <button id="btn-begin-select" class="big-btn primary">🎭 キャラ選択をはじめる</button>
+      <div id="lobby-start-row" hidden>
+        <div class="seg" id="seg-online-mode">
+          <button data-v="normal" class="on">🏫 通常モード</button>
+          <button data-v="wizard">🧙 魔法使いモード</button>
+        </div>
+        <button id="btn-start-game" class="big-btn primary">⚔️ 対戦開始！</button>
+      </div>
+    </div>
+    <div class="field" id="lobby-guest-controls" hidden>
+      <button id="btn-lobby-select" class="big-btn primary" hidden>🎭 キャラ・相棒を選ぶ</button>
+      <p class="note" id="lobby-guest-note">ホストの操作を待っているよ…</p>
+    </div>
+    <p id="lobby-msg" class="note"></p>
+    <button id="btn-lobby-leave" class="big-btn">部屋を出る</button>
   </section>
 
   <!-- 対戦設定 -->
@@ -106,14 +166,18 @@
 </main>
 
 <footer>
-  <p>build 2026-10-31.2</p>
+  <p>build 2026-10-31.3</p>
   <p class="fanmade">※本作品は非公式のファンメイド作品です。原作『ブロックス』（Mattel）および『ブロックスシャッフル ポケモンエディション』のルールを参考にし、名称・デザインは独自のものに置き換えています。</p>
+  <p class="fanmade">オンライン対戦には PeerJS（MIT License、<code>vendor/LICENSE-peerjs.txt</code>）を使用しています。</p>
 </footer>
 
 <script src="js/pieces.js"></script>
 <script src="js/logic.js"></script>
 <script src="js/state.js"></script>
 <script src="js/cpu.js"></script>
+<script src="vendor/peerjs.min.js"></script>
+<script src="js/net.js"></script>
+<script src="js/session.js"></script>
 <script src="js/ui.js"></script>
 </body>
 </html>

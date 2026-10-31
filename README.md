@@ -13,4 +13,8 @@
 - 対戦ステートマシン・CPU： `js/state.js` / `js/cpu.js`
 - ローカル対戦UI（1台で最後まで遊べる）： `index.html` / `js/ui.js` / `css/style.css`、マニュアルは `manual.html`
 - テストは `tests/`、`scripts/check.sh` で一括チェック
-- オンライン対戦（PeerJS）は次のスライスで実装予定
+- オンライン対戦（PeerJS によるホスト権威P2P、ルームコード方式）： `js/net.js` / `js/session.js`
+
+## ライセンス表記
+
+- オンライン対戦の通信には [PeerJS](https://peerjs.com/)（MIT License）を使用し、`vendor/peerjs.min.js` として同梱しています。ライセンス全文は `vendor/LICENSE-peerjs.txt` を参照してください。

@@ -9,13 +9,23 @@
   var Logic = window.MagicLogic;
   var State = window.MagicState;
   var Cpu = window.MagicCpu;
+  var Net = window.MagicNet;
+  var Session = window.MagicSession;
 
   var COLOR_NAMES = { blue: '青', yellow: '黄', red: '赤', green: '緑' };
   var REASON_MSGS = {
     'has-legal-moves': '置ける場所があるからパスできないよ',
     'must-play-card-first': 'まずカードを出してね',
     'cannot-pass-in-opening': '最初の1手はパスできないよ',
-    'game-finished': 'ゲームは終わっています'
+    'game-finished': 'ゲームは終わっています',
+    'not-your-turn': 'まだあなたの番じゃないよ',
+    'already-taken': 'そのキャラ・相棒はもう選ばれているよ',
+    'pair-conflict': '2人戦では相棒の色ペアがかぶらないように選んでね',
+    'room-full': '部屋が満員だよ',
+    'already-started': 'その部屋はもう始まっているよ',
+    'not-in-game': 'まだ対戦が始まっていないよ',
+    'no-seat': '席が見つからないよ',
+    'invalid-choice': 'その選択はできないよ'
   };
 
   function $(id) { return document.getElementById(id); }
@@ -26,7 +36,8 @@
     return e;
   }
   function showScreen(id) {
-    ['screen-home', 'screen-setup', 'screen-select', 'screen-game', 'screen-result']
+    ['screen-home', 'screen-setup', 'screen-select', 'screen-game', 'screen-result',
+     'screen-online', 'screen-lobby']
       .forEach(function (s) { $(s).hidden = s !== id; });
     window.scrollTo(0, 0);
   }
@@ -217,6 +228,377 @@
     return State.pairOf(firstColor).indexOf(State.partnerById(partnerId).color) < 0;
   }
 
+  /* ============ オンライン対戦 ============ */
+  var online = null;
+  // { role:'host'|'guest', code, name, net, session, myKey, myPlayerId, lobby, cpuLevel, mode }
+  var osel = null; // オンライン用キャラ選択 { step, gender, student, partner }
+  var hostPumpTimer = null;
+
+  function onlineName() {
+    return ($('online-name').value || '').trim() || (online && online.role === 'host' ? 'ホスト' : 'ゲスト');
+  }
+  function setOnlineStatus(text) { $('online-status').textContent = text || ''; }
+  function setLobbyMsg(text) { $('lobby-msg').textContent = text || ''; }
+
+  function mySeat() {
+    if (!online || !online.lobby) return null;
+    var key = online.role === 'host' ? Session.LOCAL_KEY : online.myKey;
+    var found = null;
+    online.lobby.seats.forEach(function (s) { if (s.key === key) found = s; });
+    return found;
+  }
+
+  /* 配信された公開 state を、UI が描画できる形（自分の手札だけ実データ）に戻す */
+  function buildViewState(pub, priv) {
+    var view = JSON.parse(JSON.stringify(pub));
+    Object.keys(view.decks || {}).forEach(function (key) {
+      var d = view.decks[key];
+      var hand = (priv && key === priv.playerId) ? priv.hand.slice() : [];
+      if (priv && key !== priv.playerId) {
+        for (var i = 0; i < d.handCount; i++) hand.push(null);
+      }
+      view.decks[key] = { draw: new Array(d.drawCount), hand: hand, discard: d.discard };
+    });
+    return view;
+  }
+
+  function onOnlineState(msg) {
+    if (!online) return;
+    online.myPlayerId = msg.private ? msg.private.playerId : null;
+    game = buildViewState(msg.state, msg.private);
+    setup.mode = game.mode;
+    resetUi();
+    applyTheme();
+    buildBoard();
+    showScreen('screen-game');
+    renderAll();
+  }
+
+  function onOnlineError(msg) {
+    var text = REASON_MSGS[msg.reason] || msg.reason;
+    if (!$('screen-game').hidden) {
+      showMsg(msg.reason);
+    } else if (!$('screen-lobby').hidden || !$('screen-select').hidden) {
+      setLobbyMsg(text);
+      // 選択の競合なら最新のロビー情報で選択画面を描き直す
+      if (msg.reason === 'already-taken' && osel && online && online.lobby &&
+          online.lobby.phase === 'select') {
+        showScreen('screen-select');
+        renderOnlineSelect();
+      }
+    } else {
+      setOnlineStatus(text);
+    }
+  }
+
+  function onOnlineEnded() {
+    var was = online;
+    leaveOnline(false);
+    game = null;
+    document.body.className = 'theme-normal';
+    showScreen('screen-home');
+    if (was) alert('ホストとの接続が切れたため、対戦は終了しました。');
+  }
+
+  function handleHostMessage(msg) {
+    if (!online || online.role !== 'host') return;
+    if (msg.t === 'lobby') {
+      online.lobby = msg.lobby;
+      renderLobby();
+      if (osel && !$('screen-select').hidden) renderOnlineSelect();
+    } else if (msg.t === 'state') {
+      onOnlineState(msg);
+    } else if (msg.t === 'error') {
+      onOnlineError(msg);
+    }
+  }
+
+  function startHostRoom() {
+    var name = onlineName();
+    var code = Net.makeCode(5);
+    online = {
+      role: 'host', code: code, name: name, net: null, session: null,
+      myKey: Session.LOCAL_KEY, myPlayerId: null, lobby: null, cpuLevel: 2, mode: 'normal'
+    };
+    setOnlineStatus('部屋を作成中…');
+    var session = Session.createHostSession({
+      code: code, hostName: name,
+      sendLocal: handleHostMessage
+    });
+    online.session = session;
+    try {
+      online.net = Net.createHost(code, {
+        onOpen: function () {
+          online.lobby = session.getLobby();
+          showScreen('screen-lobby');
+          renderLobby();
+        },
+        onGuestOpen: function (connId) {
+          var key = session.attachGuest(function (m) { online.net.sendTo(connId, m); });
+          online['keyOf_' + connId] = key;
+        },
+        onGuestData: function (connId, data) {
+          var key = online['keyOf_' + connId];
+          if (key) session.receive(key, data);
+        },
+        onGuestClose: function (connId) {
+          var key = online['keyOf_' + connId];
+          if (key) session.detachGuest(key);
+        },
+        onError: function (type) {
+          if (type === 'unavailable-id') {
+            setOnlineStatus('そのルームコードは使用中だよ。もう一度試してね。');
+            showScreen('screen-online');
+            leaveOnline(false);
+          } else {
+            setOnlineStatus('通信エラー（' + type + '）');
+          }
+        }
+      });
+    } catch (e) {
+      setOnlineStatus('通信の初期化に失敗しました');
+      online = null;
+    }
+  }
+
+  function startGuestRoom() {
+    var code = ($('online-code').value || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{4,6}$/.test(code)) {
+      setOnlineStatus('ルームコードは英数字4〜6文字で入力してね');
+      return;
+    }
+    var name = onlineName();
+    online = {
+      role: 'guest', code: code, name: name, net: null, session: null,
+      myKey: null, myPlayerId: null, lobby: null, cpuLevel: 2, mode: 'normal'
+    };
+    setOnlineStatus('部屋「' + code + '」に接続中…');
+    var session = Session.createGuestSession({
+      name: name,
+      send: function (m) { if (online && online.net) online.net.send(m); },
+      onWelcome: function (msg) {
+        online.myKey = msg.key;
+        showScreen('screen-lobby');
+      },
+      onLobby: function (lobby) {
+        online.lobby = lobby;
+        renderLobby();
+        if (!$('screen-select').hidden) {
+          if (osel) renderOnlineSelect();
+        } else if ($('screen-game').hidden) {
+          showScreen('screen-lobby');
+        }
+      },
+      onState: onOnlineState,
+      onError: onOnlineError,
+      onNotice: function (msg) { setLobbyMsg(msg.text); },
+      onEnded: onOnlineEnded
+    });
+    online.session = session;
+    try {
+      online.net = Net.createGuest(code, {
+        onOpen: function () { session.connect(); },
+        onData: function (data) { session.receive(data); },
+        onClose: function () { session.transportClosed(); },
+        onError: function (type) {
+          if (type === 'peer-unavailable') {
+            setOnlineStatus('部屋が見つからないよ。コードを確認してね。');
+          } else {
+            setOnlineStatus('通信エラー（' + type + '）');
+          }
+        }
+      });
+    } catch (e) {
+      setOnlineStatus('通信の初期化に失敗しました');
+      online = null;
+    }
+  }
+
+  function leaveOnline(notifyHost) {
+    if (hostPumpTimer) { clearTimeout(hostPumpTimer); hostPumpTimer = null; }
+    if (!online) return;
+    var o = online;
+    online = null;
+    try {
+      if (o.role === 'host' && o.session) o.session.close();
+      if (o.role === 'guest' && o.session && notifyHost !== false) o.session.leave();
+    } catch (e) { /* noop */ }
+    try { if (o.net) o.net.close(); } catch (e) { /* noop */ }
+  }
+
+  /* --- ロビー描画 --- */
+  function renderLobby() {
+    if (!online || !online.lobby) return;
+    var lobby = online.lobby;
+    var isHost = online.role === 'host';
+    $('lobby-code').textContent = online.code;
+    var note = {
+      waiting: '友達にコードを教えて、集まるのを待ってね。',
+      select: 'キャラと相棒を選んでね（先に選んだ人のものは選べないよ）。',
+      game: '対戦中だよ。'
+    }[lobby.phase] || '';
+    $('lobby-phase-note').textContent = note;
+
+    var wrap = $('lobby-members');
+    wrap.innerHTML = '';
+    var me = mySeat();
+    lobby.seats.forEach(function (s) {
+      var row = el('div', 'member-row' + (s.connected ? '' : ' offline') + (me && s.key === me.key ? ' me' : ''));
+      var label;
+      if (s.kind === 'cpu') {
+        label = '🤖 ' + s.name + '（つよさ ' + s.cpuLevel + '）';
+      } else {
+        var stu = s.characterId ? State.studentById(s.characterId) : null;
+        var pt = s.partnerId ? State.partnerById(s.partnerId) : null;
+        label = (stu ? (onlineModeIsWizard() ? stu.wizardEmoji : stu.emoji) : '🧑') +
+          (pt ? pt.emoji : '') + ' ' + s.name + (s.isHost ? '（ホスト）' : '');
+      }
+      row.appendChild(el('span', 'm-name', label));
+      var status;
+      if (s.kind === 'cpu') status = s.characterId ? '準備OK' : '自動で割当';
+      else if (!s.connected) status = '切断中…';
+      else if (lobby.phase === 'waiting') status = '待機中';
+      else if (s.declared) status = '選択OK ✔';
+      else status = '選択中…';
+      row.appendChild(el('span', 'm-status', status));
+      wrap.appendChild(row);
+    });
+
+    $('lobby-host-controls').hidden = !isHost;
+    $('lobby-guest-controls').hidden = isHost;
+    if (isHost) {
+      $('lobby-cpu-row').hidden = lobby.phase !== 'waiting';
+      $('btn-begin-select').hidden = lobby.phase !== 'waiting' || lobby.seats.length < 2;
+      $('lobby-start-row').hidden = !(lobby.phase === 'select' && lobby.allDeclared);
+      $('btn-lobby-select').hidden = true;
+      if (lobby.phase === 'select' && me && !me.declared) {
+        $('lobby-host-controls').hidden = false;
+        $('btn-lobby-select').hidden = false;
+        $('lobby-guest-controls').hidden = false;
+        $('lobby-guest-note').textContent = 'ホストのあなたもキャラ・相棒を選んでね。';
+      }
+    } else {
+      var needSelect = lobby.phase === 'select' && me && !me.declared;
+      $('btn-lobby-select').hidden = !needSelect;
+      $('lobby-guest-note').textContent =
+        lobby.phase === 'waiting' ? 'ホストがキャラ選択をはじめるのを待っているよ…' :
+        lobby.phase === 'select' ? (me && me.declared ? '選択OK！みんなが選び終わるのを待っているよ…' : 'キャラ・相棒を選んでね。') :
+        '対戦中だよ。';
+    }
+    if (lobby.phase === 'game' && game) showScreen('screen-game');
+  }
+  function onlineModeIsWizard() {
+    return online && online.lobby && online.lobby.mode === 'wizard';
+  }
+
+  /* --- オンライン用キャラ選択（自分1人分） --- */
+  function startOnlineSelect() {
+    osel = { step: 'gender', gender: null, student: null, partner: null };
+    showScreen('screen-select');
+    renderOnlineSelect();
+  }
+  function onlineTakenStudents() {
+    if (!online || !online.lobby) return [];
+    return online.lobby.seats.filter(function (s) { return s.declared && s.characterId; })
+      .map(function (s) { return s.characterId; });
+  }
+  function onlineTakenPartners() {
+    if (!online || !online.lobby) return [];
+    return online.lobby.seats.filter(function (s) { return s.declared && s.partnerId; })
+      .map(function (s) { return s.partnerId; });
+  }
+  function onlinePartnerAllowed(partnerId) {
+    if (!online || !online.lobby || online.lobby.seats.length !== 2) return true;
+    var others = online.lobby.seats.filter(function (s) {
+      return s.declared && s.partnerId && !(mySeat() && s.key === mySeat().key);
+    });
+    if (others.length === 0) return true;
+    var firstColor = State.partnerById(others[0].partnerId).color;
+    return State.pairOf(firstColor).indexOf(State.partnerById(partnerId).color) < 0;
+  }
+  function renderOnlineSelect() {
+    if (!osel) return;
+    var body = $('select-body');
+    body.innerHTML = '';
+    $('select-title').textContent = 'キャラ選択（' + online.name + 'さん）';
+    $('select-progress').textContent = 'オンライン対戦：自分のキャラと相棒を選んでね';
+    if (osel.step === 'gender') {
+      body.appendChild(el('div', 'step-title', '性別をえらんでね'));
+      var grid = el('div', 'choice-grid');
+      grid.appendChild(choiceCard('👦', 'おとこのこ', null, false, function () {
+        osel.gender = 'male'; osel.step = 'student'; renderOnlineSelect();
+      }));
+      grid.appendChild(choiceCard('👧', 'おんなのこ', null, false, function () {
+        osel.gender = 'female'; osel.step = 'student'; renderOnlineSelect();
+      }));
+      body.appendChild(grid);
+    } else if (osel.step === 'student') {
+      body.appendChild(el('div', 'step-title', '生徒をえらんでね'));
+      var grid2 = el('div', 'choice-grid');
+      var taken = onlineTakenStudents();
+      State.STUDENTS.filter(function (s) { return s.gender === osel.gender; }).forEach(function (stu) {
+        var forms = '普通の学校：' + stu.emoji + ' ／ 魔法学校：' + stu.wizardEmoji;
+        grid2.appendChild(choiceCard(stu.emoji, stu.name, forms, taken.indexOf(stu.id) >= 0,
+          function () {
+            osel.student = stu.id; osel.step = 'partner'; renderOnlineSelect();
+          }));
+      });
+      body.appendChild(grid2);
+    } else if (osel.step === 'partner') {
+      body.appendChild(el('div', 'step-title', '相棒をえらんでね（色が決まるよ）'));
+      var grid3 = el('div', 'choice-grid');
+      var takenP = onlineTakenPartners();
+      State.PARTNERS.forEach(function (pt) {
+        var disabled = takenP.indexOf(pt.id) >= 0 || !onlinePartnerAllowed(pt.id);
+        var card = choiceCard(pt.emoji, pt.name, null, disabled, function () {
+          osel.partner = pt.id;
+          submitOnlineDeclare();
+        });
+        var chip = el('span', 'color-chip dot-' + pt.color);
+        card.insertBefore(chip, card.childNodes[1]);
+        card.appendChild(el('span', 'forms', COLOR_NAMES[pt.color] + 'のピース担当'));
+        grid3.appendChild(card);
+      });
+      body.appendChild(grid3);
+    }
+  }
+  function submitOnlineDeclare() {
+    if (!online || !osel) return;
+    if (online.role === 'host') {
+      online.session.receive(Session.LOCAL_KEY, {
+        t: 'declare', characterId: osel.student, partnerId: osel.partner
+      });
+    } else {
+      online.session.declare(osel.student, osel.partner);
+    }
+    osel = null;
+    showScreen('screen-lobby');
+    renderLobby();
+  }
+
+  /* オンライン時の move 送信（結果は state 配信で戻ってくる） */
+  function submitOnlineMove(move) {
+    if (!online) return;
+    if (online.role === 'host') {
+      online.session.receive(Session.LOCAL_KEY, { t: 'move', move: move });
+    } else {
+      online.session.sendMove(move);
+    }
+    ui.selectedPiece = null; ui.tentative = null;
+    ui.targetMode = null; ui.cardIndex = null; ui.warpCtx = null;
+    showMsg('');
+    renderAll();
+  }
+
+  /* ホスト側：CPU席・切断席の手番を少しずつ進める */
+  function scheduleHostPump() {
+    if (hostPumpTimer) { clearTimeout(hostPumpTimer); hostPumpTimer = null; }
+    if (!online || online.role !== 'host' || !game || game.phase === 'finished') return;
+    hostPumpTimer = setTimeout(function () {
+      if (online && online.session) online.session.stepAutomation();
+    }, 550);
+  }
+
   /* ============ 対戦 ============ */
   var game = null;
   var lastConfig = null;
@@ -247,8 +629,13 @@
     return info ? State.playerById(game, info.controllerId) : null;
   }
   function isHumanTurn() {
+    if (!game || game.phase === 'finished') return false;
+    if (online) {
+      var info = State.getTurnInfo(game);
+      return !!info && info.controllerId === online.myPlayerId;
+    }
     var p = currentPlayer();
-    return p && p.type === 'human' && game.phase !== 'finished';
+    return p && p.type === 'human';
   }
 
   /* 盤面DOMを一度だけ作る */
@@ -309,7 +696,11 @@
       showScreen('screen-result');
       return;
     }
-    scheduleCpu();
+    if (online) {
+      if (online.role === 'host') scheduleHostPump();
+    } else {
+      scheduleCpu();
+    }
   }
 
   function renderBanner() {
@@ -333,6 +724,10 @@
       else if (info.cardPlayedType === 'twin') sub = 'ツインキャスト：あと1個、1個目と角がつながる場所に置いてね';
       else if (info.allowEdge) sub = 'ぴたっとボンド：辺でくっつけてもOK！';
       else sub = 'ピースを置いてね（置けなければパス）';
+    }
+    if (online && game.phase !== 'finished' && player &&
+        info.controllerId !== online.myPlayerId && player.type === 'human') {
+      sub = 'あいての手番だよ。結果が届くのを待っててね…';
     }
     $('turn-banner').innerHTML = '';
     $('turn-banner').appendChild(document.createTextNode(text));
@@ -484,7 +879,8 @@
       return;
     }
     var deck = game.decks[info.controllerId];
-    if (info.step === 'card' && player.type === 'human') {
+    if (info.step === 'card' && player.type === 'human' &&
+        (!online || info.controllerId === online.myPlayerId)) {
       deck.hand.forEach(function (type, idx) {
         var def = State.CARD_DEFS[type];
         var card = el('button', 'magic-card');
@@ -588,6 +984,10 @@
   }
 
   function doPlayCard(idx, target) {
+    if (online) {
+      submitOnlineMove({ type: 'playCard', cardIndex: idx, target: target });
+      return;
+    }
     var r = State.applyMove(game, { type: 'playCard', cardIndex: idx, target: target });
     if (!r.ok) { showMsg(r.reason); return; }
     game = r.state;
@@ -655,6 +1055,10 @@
   function doConfirm() {
     if (!ui.tentative) return;
     var m = ui.tentative;
+    if (online) {
+      submitOnlineMove({ type: 'place', pieceId: m.pieceId, variantIndex: m.variantIndex, origin: m.origin });
+      return;
+    }
     var r = State.applyMove(game, {
       type: 'place', pieceId: m.pieceId, variantIndex: m.variantIndex, origin: m.origin
     });
@@ -718,6 +1122,7 @@
 
   /* ============ 結果 ============ */
   function renderResult() {
+    $('btn-rematch').style.display = online ? 'none' : '';
     var res = game.results;
     var winnerNames = res.winners.map(function (id) {
       return playerLabel(State.playerById(game, id));
@@ -777,7 +1182,10 @@
     $('btn-show-setup').addEventListener('click', function () { applyTheme(); showScreen('screen-setup'); });
     $('btn-setup-back').addEventListener('click', function () { showScreen('screen-home'); });
     $('btn-to-select').addEventListener('click', startSelect);
-    $('btn-select-back').addEventListener('click', function () { showScreen('screen-setup'); });
+    $('btn-select-back').addEventListener('click', function () {
+      if (online) { osel = null; showScreen('screen-lobby'); renderLobby(); return; }
+      showScreen('screen-setup');
+    });
     $('board').addEventListener('click', onBoardClick);
     $('btn-confirm').addEventListener('click', doConfirm);
     $('btn-cancel').addEventListener('click', function () {
@@ -789,6 +1197,7 @@
     });
     $('btn-flip').addEventListener('click', function () { rotateSelected('flip'); });
     $('btn-pass').addEventListener('click', function () {
+      if (online) { submitOnlineMove({ type: 'pass' }); return; }
       var r = State.applyMove(game, { type: 'pass' });
       if (!r.ok) { showMsg(r.reason); return; }
       game = r.state;
@@ -798,6 +1207,7 @@
     });
     $('btn-quit').addEventListener('click', function () {
       if (cpuTimer) clearTimeout(cpuTimer);
+      if (online) leaveOnline(true);
       game = null;
       document.body.className = 'theme-normal';
       showScreen('screen-home');
@@ -812,9 +1222,55 @@
       renderAll();
     });
     $('btn-home').addEventListener('click', function () {
+      if (online) leaveOnline(true);
       game = null;
       document.body.className = 'theme-normal';
       showScreen('screen-home');
+    });
+
+    /* オンライン配線 */
+    $('btn-show-online').addEventListener('click', function () {
+      setOnlineStatus('');
+      showScreen('screen-online');
+    });
+    $('btn-online-back').addEventListener('click', function () { showScreen('screen-home'); });
+    $('btn-create-room').addEventListener('click', startHostRoom);
+    $('btn-join-room').addEventListener('click', startGuestRoom);
+    $('btn-lobby-leave').addEventListener('click', function () {
+      leaveOnline(true);
+      game = null;
+      document.body.className = 'theme-normal';
+      showScreen('screen-home');
+    });
+    $('btn-lobby-select').addEventListener('click', startOnlineSelect);
+    $('seg-cpu-level').addEventListener('click', function (ev) {
+      var btn = ev.target.closest('button');
+      if (!btn) return;
+      Array.prototype.forEach.call($('seg-cpu-level').children, function (b) { b.classList.remove('on'); });
+      btn.classList.add('on');
+      if (online) online.cpuLevel = Number(btn.dataset.v);
+    });
+    $('seg-online-mode').addEventListener('click', function (ev) {
+      var btn = ev.target.closest('button');
+      if (!btn) return;
+      Array.prototype.forEach.call($('seg-online-mode').children, function (b) { b.classList.remove('on'); });
+      btn.classList.add('on');
+      if (online) online.mode = btn.dataset.v;
+    });
+    $('btn-add-cpu').addEventListener('click', function () {
+      if (!online || online.role !== 'host') return;
+      var r = online.session.addCpu(online.cpuLevel);
+      if (!r.ok) setLobbyMsg(REASON_MSGS[r.reason] || r.reason);
+    });
+    $('btn-begin-select').addEventListener('click', function () {
+      if (!online || online.role !== 'host') return;
+      var r = online.session.beginSelect();
+      if (!r.ok) setLobbyMsg(r.reason === 'too-few-players' ? '2人以上集まってから始めてね' : r.reason);
+    });
+    $('btn-start-game').addEventListener('click', function () {
+      if (!online || online.role !== 'host') return;
+      var r = online.session.startGame(online.mode);
+      if (!r.ok) setLobbyMsg(REASON_MSGS[r.reason] || r.reason);
     });
   }
 
