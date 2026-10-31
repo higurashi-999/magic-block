@@ -16,10 +16,9 @@
   <!-- ホーム -->
   <section id="screen-home" class="screen">
     <div class="title-card">
-      <div class="title-emoji">🏫✨🧙</div>
-      <h1>マジック・ブロック</h1>
+      <img id="title-logo" class="title-logo" alt="マジック・ブロック">
       <p class="tagline">角と角をつなげて陣地を広げる、<br>ドタバタ魔法学園の陣取りゲーム！</p>
-      <div class="mascot-row"><span>🦁</span><span>🦡</span><span>🦅</span><span>🐍</span></div>
+      <div class="mascot-row"><img data-partner="lion" alt="ライオン"><img data-partner="badger" alt="アナグマ"><img data-partner="eagle" alt="ワシ"><img data-partner="snake" alt="ヘビ"></div>
     </div>
     <button id="btn-show-setup" class="big-btn primary">🤖 CPUと対戦</button>
     <button id="btn-show-online" class="big-btn">🌐 オンライン対戦</button>
@@ -166,7 +165,7 @@
 </main>
 
 <footer>
-  <p>build 2026-10-31.5</p>
+  <p>build 2026-10-31.6</p>
   <p class="fanmade">※本作品は非公式のファンメイド作品です。原作『ブロックス』（Mattel）および『ブロックスシャッフル ポケモンエディション』のルールを参考にし、名称・デザインは独自のものに置き換えています。</p>
   <p class="fanmade">オンライン対戦には PeerJS（MIT License、<code>vendor/LICENSE-peerjs.txt</code>）を使用しています。</p>
 </footer>
@@ -179,6 +178,7 @@
 <script src="vendor/peerjs.min.js"></script>
 <script src="js/net.js"></script>
 <script src="js/session.js"></script>
+<script src="js/assets.js"></script>
 <script src="js/ui.js"></script>
 </body>
 </html>

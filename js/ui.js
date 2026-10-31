@@ -12,6 +12,7 @@
   var PlaceUi = window.MagicPlaceUi;
   var Net = window.MagicNet;
   var Session = window.MagicSession;
+  var Assets = window.MagicAssets;
 
   var COLOR_NAMES = { blue: '青', yellow: '黄', red: '赤', green: '緑' };
   var REASON_MSGS = {
@@ -35,6 +36,39 @@
     if (cls) e.className = cls;
     if (text != null) e.textContent = text;
     return e;
+  }
+
+  /* イラスト素材（js/assets.js の data URI）。素材が無い場合は null を返し、
+   * 呼び出し側は従来の絵文字表示にフォールバックする。 */
+  function charSrc(characterId, wizard) {
+    if (!Assets) return null;
+    var group = wizard ? Assets.charMagic : Assets.charNormal;
+    return (group && group[characterId]) || null;
+  }
+  function partnerSrc(partnerId) {
+    if (!Assets || !Assets.partner) return null;
+    return Assets.partner[partnerId] || null;
+  }
+  function imgEl(src, cls, alt) {
+    if (!src) return null;
+    var img = document.createElement('img');
+    img.src = src;
+    img.className = cls;
+    img.alt = alt || '';
+    return img;
+  }
+  /* プレイヤーのポートレート＋相棒アイコンの組（素材が無い場合は null） */
+  function playerFaces(p, wizard, portraitCls, partnerCls) {
+    if (!p || !p.characterId) return null;
+    var cs = charSrc(p.characterId, wizard);
+    if (!cs) return null;
+    var wrap = el('span', 'face-pair');
+    wrap.appendChild(imgEl(cs, portraitCls, ''));
+    if (p.partnerId) {
+      var ps = partnerSrc(p.partnerId);
+      if (ps) wrap.appendChild(imgEl(ps, partnerCls, ''));
+    }
+    return wrap;
   }
   function showScreen(id) {
     ['screen-home', 'screen-setup', 'screen-select', 'screen-game', 'screen-result',
@@ -132,6 +166,18 @@
     return card;
   }
 
+  /* 画像つき選択カード（素材が無い場合は絵文字カードと同じ見た目になる） */
+  function choiceCardImg(src, fallbackEmoji, title, sub, disabled, onclick) {
+    var card = el('button', 'choice-card' + (disabled ? ' disabled' : ''));
+    var im = imgEl(src, 'choice-img', title);
+    if (im) card.appendChild(im);
+    else card.appendChild(el('span', 'big-emoji', fallbackEmoji));
+    card.appendChild(document.createTextNode(title));
+    if (sub) card.appendChild(el('span', 'forms', sub));
+    if (!disabled) card.addEventListener('click', onclick);
+    return card;
+  }
+
   function renderSelect() {
     var seatIdx = sel.humanSeats[sel.pos];
     var body = $('select-body');
@@ -156,7 +202,8 @@
       var taken = takenStudents();
       State.STUDENTS.filter(function (s) { return s.gender === sel.gender; }).forEach(function (stu) {
         var forms = '普通の学校：' + stu.emoji + ' ／ 魔法学校：' + stu.wizardEmoji;
-        grid2.appendChild(choiceCard(
+        grid2.appendChild(choiceCardImg(
+          charSrc(stu.id, setup.mode === 'wizard'),
           setup.mode === 'wizard' ? stu.wizardEmoji : stu.emoji,
           stu.name, forms, taken.indexOf(stu.id) >= 0,
           function () {
@@ -171,7 +218,7 @@
       var takenP = takenPartners();
       State.PARTNERS.forEach(function (pt) {
         var disabled = takenP.indexOf(pt.id) >= 0 || !partnerAllowed(pt.id);
-        var card = choiceCard(pt.emoji, pt.name, null, disabled, function () {
+        var card = choiceCardImg(partnerSrc(pt.id), pt.emoji, pt.name, null, disabled, function () {
           sel.choices[seatIdx].partner = pt.id;
           nextSelectSeat();
         });
@@ -445,9 +492,16 @@
     var me = mySeat();
     lobby.seats.forEach(function (s) {
       var row = el('div', 'member-row' + (s.connected ? '' : ' offline') + (me && s.key === me.key ? ' me' : ''));
+      var faces = s.characterId
+        ? playerFaces({ characterId: s.characterId, partnerId: s.partnerId },
+            onlineModeIsWizard(), 'avatar-mini', 'partner-mini')
+        : null;
+      if (faces) row.appendChild(faces);
       var label;
       if (s.kind === 'cpu') {
         label = '🤖 ' + s.name + '（つよさ ' + s.cpuLevel + '）';
+      } else if (faces) {
+        label = s.name + (s.isHost ? '（ホスト）' : '');
       } else {
         var stu = s.characterId ? State.studentById(s.characterId) : null;
         var pt = s.partnerId ? State.partnerById(s.partnerId) : null;
@@ -539,7 +593,8 @@
       var taken = onlineTakenStudents();
       State.STUDENTS.filter(function (s) { return s.gender === osel.gender; }).forEach(function (stu) {
         var forms = '普通の学校：' + stu.emoji + ' ／ 魔法学校：' + stu.wizardEmoji;
-        grid2.appendChild(choiceCard(stu.emoji, stu.name, forms, taken.indexOf(stu.id) >= 0,
+        grid2.appendChild(choiceCardImg(charSrc(stu.id, false), stu.emoji,
+          stu.name, forms, taken.indexOf(stu.id) >= 0,
           function () {
             osel.student = stu.id; osel.step = 'partner'; renderOnlineSelect();
           }));
@@ -551,7 +606,7 @@
       var takenP = onlineTakenPartners();
       State.PARTNERS.forEach(function (pt) {
         var disabled = takenP.indexOf(pt.id) >= 0 || !onlinePartnerAllowed(pt.id);
-        var card = choiceCard(pt.emoji, pt.name, null, disabled, function () {
+        var card = choiceCardImg(partnerSrc(pt.id), pt.emoji, pt.name, null, disabled, function () {
           osel.partner = pt.id;
           submitOnlineDeclare();
         });
@@ -745,9 +800,14 @@
         info.controllerId !== online.myPlayerId && player.type === 'human') {
       sub = 'あいての手番だよ。結果が届くのを待っててね…';
     }
-    $('turn-banner').innerHTML = '';
-    $('turn-banner').appendChild(document.createTextNode(text));
-    if (sub) $('turn-banner').appendChild(el('span', 'sub', sub));
+    var banner = $('turn-banner');
+    banner.innerHTML = '';
+    if (player && game.phase !== 'finished') {
+      var bFaces = playerFaces(player, game.mode === 'wizard', 'banner-avatar', 'banner-partner');
+      if (bFaces) banner.appendChild(bFaces);
+    }
+    banner.appendChild(document.createTextNode(text));
+    if (sub) banner.appendChild(el('span', 'sub', sub));
   }
 
   function renderStrip() {
@@ -760,7 +820,9 @@
       var chip = el('div', 'p-chip' + (info && info.color === color && game.phase !== 'finished' ? ' turn' : ''));
       var dot = el('span', 'dot dot-' + color);
       chip.appendChild(dot);
-      chip.appendChild(el('span', 'pname', owner ? playerLabel(owner) : '🎲 フリー'));
+      var sFaces = owner ? playerFaces(owner, game.mode === 'wizard', 'avatar', 'partner-mini') : null;
+      if (sFaces) chip.appendChild(sFaces);
+      chip.appendChild(el('span', 'pname', owner ? (sFaces ? owner.name : playerLabel(owner)) : '🎲 フリー'));
       chip.appendChild(document.createElement('br'));
       var rest = Logic.remainingSquares(game.hands[color]);
       chip.appendChild(document.createTextNode('残り ' + rest + 'マス'));
@@ -1193,10 +1255,16 @@
   function renderResult() {
     $('btn-rematch').style.display = online ? 'none' : '';
     var res = game.results;
-    var winnerNames = res.winners.map(function (id) {
-      return playerLabel(State.playerById(game, id));
-    }).join(' ＆ ');
-    $('winner-banner').textContent = '🏆 勝者：' + winnerNames;
+    var wb = $('winner-banner');
+    wb.innerHTML = '';
+    wb.appendChild(document.createTextNode('🏆 勝者：'));
+    res.winners.forEach(function (id, i) {
+      var wp = State.playerById(game, id);
+      if (i > 0) wb.appendChild(document.createTextNode(' ＆ '));
+      var wFaces = playerFaces(wp, game.mode === 'wizard', 'avatar', 'partner-mini');
+      if (wFaces) wb.appendChild(wFaces);
+      wb.appendChild(document.createTextNode(wFaces ? wp.name : playerLabel(wp)));
+    });
     var wrap = $('result-table');
     wrap.innerHTML = '';
     var table = el('table', null);
@@ -1208,7 +1276,10 @@
       p.colors.forEach(function (color, ci) {
         var tr = el('tr', isWin ? 'win' : '');
         if (ci === 0) {
-          var tdName = el('td', null, playerLabel(p));
+          var tdName = el('td', null);
+          var pFaces = playerFaces(p, game.mode === 'wizard', 'avatar-mini', 'partner-mini');
+          if (pFaces) tdName.appendChild(pFaces);
+          tdName.appendChild(document.createTextNode(pFaces ? p.name : playerLabel(p)));
           tdName.rowSpan = p.colors.length;
           tr.appendChild(tdName);
         }
@@ -1244,6 +1315,12 @@
 
   /* ============ イベント配線 ============ */
   function init() {
+    /* イラスト素材を静的 img 要素へ適用（ホームのロゴと相棒マスコット） */
+    if (Assets && Assets.logo) $('title-logo').src = Assets.logo;
+    Array.prototype.forEach.call(document.querySelectorAll('img[data-partner]'), function (img) {
+      var src = partnerSrc(img.getAttribute('data-partner'));
+      if (src) img.src = src;
+    });
     segWire('seg-count', 'count', Number);
     segWire('seg-mode', 'mode', String);
     segWire('seg-level', 'cpuLevel', Number);
