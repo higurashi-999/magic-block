@@ -175,7 +175,7 @@ test('宣言：生徒・相棒の重複は仲裁され、2人戦の色ペア競�
 // ---------- 対戦の同期と検証 ----------
 
 test('対戦：開始で全員へ state が届き、不正な move は拒否されて state が変わらない', () => {
-  const hostRec = makeHost(6);
+  const hostRec = makeHost(7); // 開始色が青（＝ホストの色）になるシード
   const g1 = makeGuest(hostRec, 'ゲスト1');
   assert.strictEqual(hostRec.host.addCpu(2).ok, true);
   hostRec.host.beginSelect();
@@ -204,6 +204,20 @@ test('対戦：開始で全員へ state が届き、不正な move は拒否さ�
   hostRec.host.receive('local', { t: 'move', move: mv });
   assert.notStrictEqual(JSON.stringify(hostRec.host.getGameState()), before);
   assertConverged(hostRec, [hostRec, g1]);
+});
+
+test('対戦：開始色はホストの state に保持され、ゲストにも一致して届く', () => {
+  const { hostRec, g1 } = lobby2p(60);
+  declareLocal(hostRec, 'sora', 'eagle');
+  g1.guest.declare('ren', 'badger');
+  assert.strictEqual(hostRec.host.startGame('normal').ok, true);
+  const hs = hostRec.host.getGameState();
+  assert.ok(State.TURN_ORDER.indexOf(hs.startColor) >= 0, '開始色が決まっていること');
+  [hostRec, g1].forEach((rec) => {
+    const st = lastState(rec).state;
+    assert.strictEqual(st.startColor, hs.startColor, '開始色が全員一致すること');
+    assert.strictEqual(State.getTurnInfo(st).color, hs.startColor, '最初の手番は開始色であること');
+  });
 });
 
 test('対戦：CPU席混在（人間2＋CPU2・通常モード）で最後まで進み state が一致する', () => {

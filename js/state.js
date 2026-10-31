@@ -220,10 +220,12 @@
    *   mode: 'normal' | 'wizard',
    *   players: [{ id, name, type: 'human'|'cpu', cpuLevel: 1|2|3,
    *               characterId, partnerId, colors?: [color,...] }],
-   *   rng?: function () -> [0,1)  // デッキシャッフル用
+   *   rng?: function () -> [0,1)  // デッキシャッフル・開始色決定用
+   *   startColor?: color  // 開始色の明示指定（省略時は rng でランダムに決める）
    * }
    * colors を省略すると partnerId のメインカラーから決まる
    * （4人/3人戦はメインカラー1色、2人戦はペア2色。残り色はフリーピース）。
+   * 手番は開始色から色順（青→黄→赤→緑）に巡回する。
    */
   function createGame(config) {
     if (!config || (config.mode !== 'normal' && config.mode !== 'wizard')) {
@@ -270,6 +272,17 @@
       }
     });
 
+    var rng = config.rng || Math.random;
+    // 開始色：明示指定がなければランダムに決める。手番はこの色から色順に巡回する
+    var startColorIdx;
+    if (config.startColor) {
+      startColorIdx = TURN_ORDER.indexOf(config.startColor);
+      if (startColorIdx < 0) throw new Error('createGame: unknown startColor ' + config.startColor);
+    } else {
+      startColorIdx = Math.floor(rng() * TURN_ORDER.length);
+    }
+    var startColor = TURN_ORDER[startColorIdx];
+
     var state = {
       mode: config.mode,
       phase: 'opening',
@@ -283,7 +296,8 @@
       passed: {},
       locked: {},
       decks: {},
-      turnColorIdx: 0,
+      startColor: startColor,
+      turnColorIdx: startColorIdx,
       freeControlPtr: 0,
       openingDone: {},
       initialDrawn: {},
@@ -301,7 +315,6 @@
       state.openingDone[color] = false;
     });
     if (config.mode === 'wizard') {
-      var rng = config.rng || Math.random;
       // 2人戦は2色分28枚を混ぜた1つの山札にする（SPEC 6.6）
       var decksPerPlayer = players.length === 2 ? 2 : 1;
       players.forEach(function (p) {
@@ -320,6 +333,7 @@
       }
     }
     state.log.push('ゲーム開始（' + (config.mode === 'wizard' ? '魔法使いモード' : '通常モード') + '）');
+    state.log.push('🎲 ' + startColor + ' からスタート');
     return startTurn(state);
   }
 
@@ -328,6 +342,7 @@
     var t = state.turn;
     return {
       color: t.color,
+      startColor: state.startColor || null,
       controllerId: t.controllerId,
       isFree: t.isFree,
       step: t.step,
@@ -445,7 +460,8 @@
         startTurn(state);
       } else {
         state.phase = 'playing';
-        state.turnColorIdx = 0;
+        // playing は開始色から再開し、そこから色順に巡回する
+        state.turnColorIdx = TURN_ORDER.indexOf(state.startColor);
         startTurn(state);
         finishCheck(state);
       }

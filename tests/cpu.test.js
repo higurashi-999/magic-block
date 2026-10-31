@@ -93,7 +93,7 @@ test('CPU：合法手がある局面では pass を返さない（よわい以�
 
 test('CPU：置けない局面では pass を返す', () => {
   let s = State.createGame({ mode: 'normal', players: cpuPlayers(4, 2), rng: makeRng(57) });
-  s.hands.blue = []; // 手元なし＝置けない
+  s.hands[State.getTurnInfo(s).color] = []; // 現在の手番の色の手元なし＝置けない
   const mv = Cpu.chooseMove(s, 2, makeRng(58));
   assert.strictEqual(mv.type, 'pass');
 });

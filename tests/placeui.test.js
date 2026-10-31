@@ -30,7 +30,7 @@ function applyOk(state, move) {
 
 /* 全色の初手を 'one' で置き終えた state（青は (0,0) に配置される） */
 function afterOpening() {
-  let s = State.createGame({ mode: 'normal', players: players4() });
+  let s = State.createGame({ mode: 'normal', players: players4(), startColor: 'blue' });
   for (let i = 0; i < 4; i++) {
     const moves = State.legalMovesForTurn(s);
     const m = moves.find(mv => mv.pieceId === 'one') || moves[0];

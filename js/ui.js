@@ -718,8 +718,16 @@
     if (game.phase === 'finished') {
       text = '🏁 ゲーム終了！';
     } else if (game.phase === 'opening') {
-      text = '🎲 最初のピースを置こう：' + COLOR_NAMES[info.color] + '（' + playerLabel(player) + '）';
-      sub = 'ボードの四隅のどれか1マスを覆うように置いてね';
+      var nothingPlaced = Logic.TURN_ORDER.every(function (c) { return !game.openingDone[c]; });
+      if (nothingPlaced) {
+        // 対戦開始直後：開始色（ランダム）のプレイヤーを知らせる
+        text = '🎲 ' + COLOR_NAMES[info.color] + 'の' + playerLabel(player) + 'さんからスタート！';
+        if (info.isFree) text += '（フリーピース）';
+        sub = '開始色はランダム。手番はこの色から順に巡回するよ。まず四隅のどれか1マスを覆うように置いてね';
+      } else {
+        text = '🎲 最初のピースを置こう：' + COLOR_NAMES[info.color] + '（' + playerLabel(player) + '）';
+        sub = 'ボードの四隅のどれか1マスを覆うように置いてね';
+      }
     } else {
       text = '🎯 ' + COLOR_NAMES[info.color] + 'の番：' + playerLabel(player);
       if (info.isFree) text += '（フリーピースを操作）';

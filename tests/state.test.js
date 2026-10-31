@@ -67,12 +67,13 @@ function setHand(state, playerId, cards) {
 
 // ---------- ゲーム作成 ----------
 
-test('ゲーム作成：相棒から色が決まり、初手は青の番', () => {
-  const s = State.createGame({ mode: 'normal', players: players4() });
+test('ゲーム作成：相棒から色が決まり、初手は開始色の番', () => {
+  const s = State.createGame({ mode: 'normal', players: players4(), startColor: 'blue' });
   assert.strictEqual(s.phase, 'opening');
   assert.deepStrictEqual(State.playerById(s, 'p1').colors, ['blue']);
   assert.deepStrictEqual(State.playerById(s, 'p3').colors, ['red']);
   assert.strictEqual(s.freeColor, null);
+  assert.strictEqual(s.startColor, 'blue', '開始色が state に保持される');
   const info = State.getTurnInfo(s);
   assert.strictEqual(info.color, 'blue');
   assert.strictEqual(info.controllerId, 'p1');
@@ -113,8 +114,8 @@ test('applyMove は元の state を変更しない', () => {
 
 // ---------- 通常モード ----------
 
-test('通常モード：初手ラウンドを終えると playing になり青の番に戻る', () => {
-  const s = afterOpening({ mode: 'normal', players: players4() });
+test('通常モード：初手ラウンドを終えると playing になり開始色（青）の番に戻る', () => {
+  const s = afterOpening({ mode: 'normal', players: players4(), startColor: 'blue' });
   const info = State.getTurnInfo(s);
   assert.strictEqual(info.color, 'blue');
   Logic.TURN_ORDER.forEach(c => assert.strictEqual(s.openingDone[c], true));
@@ -202,7 +203,7 @@ test('魔法使い：2人戦は28枚混合デッキで手札共用・スコア�
 // ---------- 魔法使いモード：カード効果 ----------
 
 test('ツインキャスト：1手番に2個置ける（2個目は1個目と角接続）', () => {
-  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(11) });
+  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(11), startColor: 'blue' });
   const info = State.getTurnInfo(s); // blue / p1
   s = setHand(s, 'p1', ['twin', 'sleep']);
   s.hands.blue = ['two', 'one', 'three-line'];
@@ -224,7 +225,7 @@ test('ツインキャスト：1手番に2個置ける（2個目は1個目と角�
 });
 
 test('ぴたっとボンド：自色との辺接配置ができる', () => {
-  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(12) });
+  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(12), startColor: 'blue' });
   s = setHand(s, 'p1', ['bond']);
   s.hands.blue = ['two'];
   s = applyOk(s, { type: 'playCard', cardIndex: 0 });
@@ -241,7 +242,7 @@ test('ぴたっとボンド：自色との辺接配置ができる', () => {
 });
 
 test('すやすやパウダー：次のプレイヤーはカードを使えない', () => {
-  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(13) });
+  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(13), startColor: 'blue' });
   s = setHand(s, 'p1', ['sleep']);
   s = applyOk(s, { type: 'playCard', cardIndex: 0 });
   s = placeOne(s);
@@ -254,7 +255,7 @@ test('すやすやパウダー：次のプレイヤーはカードを使えな�
 });
 
 test('ミニマイズ：次のプレイヤーは一番小さいピースしか置けない', () => {
-  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(14) });
+  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(14), startColor: 'blue' });
   s = setHand(s, 'p1', ['minimize']);
   s = applyOk(s, { type: 'playCard', cardIndex: 0 });
   s = placeOne(s);
@@ -272,7 +273,7 @@ test('ミニマイズ：次のプレイヤーは一番小さいピースしか�
 });
 
 test('チョイススペル：次のプレイヤーのピースを指定できる', () => {
-  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(15) });
+  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(15), startColor: 'blue' });
   s = setHand(s, 'p1', ['choice']);
   s.hands.yellow = ['five-i', 'two', 'one'];
   s = applyOk(s, { type: 'playCard', cardIndex: 0, target: { pieceId: 'five-i' } });
@@ -289,7 +290,7 @@ test('チョイススペル：次のプレイヤーのピースを指定でき�
 });
 
 test('ピースロック：指定ピースが使用不可になり、残りマスには数えられる', () => {
-  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(16) });
+  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(16), startColor: 'blue' });
   s = setHand(s, 'p1', ['lock']);
   const before = Logic.remainingSquares(s.hands.yellow);
   s = applyOk(s, { type: 'playCard', cardIndex: 0, target: { pieceId: 'five-x' } });
@@ -299,7 +300,7 @@ test('ピースロック：指定ピースが使用不可になり、残りマ�
 });
 
 test('リコール：配置済みピースを手元に戻せる', () => {
-  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(17) });
+  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(17), startColor: 'blue' });
   s = setHand(s, 'p1', ['recall']);
   const cell = s.placedPieces.blue[0].cells[0];
   const handBefore = s.hands.blue.length;
@@ -311,7 +312,7 @@ test('リコール：配置済みピースを手元に戻せる', () => {
 });
 
 test('ワープゲート：相手のピースを角接続する別の場所へ移動できる', () => {
-  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(18) });
+  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(18), startColor: 'blue' });
   s = setHand(s, 'p1', ['warp']);
   // 赤の配置済みピース（初手 'one'）を、赤の他のピース…が無いため隅への移動になる。
   // 赤にもう1ピース置いた状態を再現する代わりに、盤面から赤を除いた合法移動先を探す
@@ -330,7 +331,7 @@ test('ワープゲート：相手のピースを角接続する別の場所へ�
 });
 
 test('魔法使い：置けない手番はパスでき、カードを1枚引いて手番が進む', () => {
-  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(19) });
+  let s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(19), startColor: 'blue' });
   // 青の手元ピースを空にし、手札も空にする（配置ステップから始まる）
   s.hands.blue = [];
   s.decks.p1.hand = [];
@@ -412,6 +413,68 @@ test('通常3人戦：フリーピースの色はスコア計算から除外さ�
   assert.strictEqual(res.scores.b, -3);
   assert.strictEqual(res.scores.c, 15);
   assert.deepStrictEqual(res.winners, ['c']);
+});
+
+// ---------- 開始色（ランダム） ----------
+
+test('開始色：シードによって開始色が変わり、最初の手番は開始色になる', () => {
+  const seen = {};
+  for (let seed = 1; seed <= 24; seed++) {
+    const s = State.createGame({ mode: 'normal', players: players4(), rng: makeRng(seed) });
+    assert.ok(Logic.TURN_ORDER.indexOf(s.startColor) >= 0, '開始色が state に保持される');
+    assert.strictEqual(State.getTurnInfo(s).color, s.startColor, '最初の手番は開始色');
+    assert.strictEqual(State.getTurnInfo(s).startColor, s.startColor);
+    seen[s.startColor] = true;
+  }
+  assert.strictEqual(Object.keys(seen).length, 4, 'シード次第で4色すべてが開始色になりうる');
+});
+
+test('開始色：開始色から色順どおりに巡回する（開幕→通常手番）', () => {
+  let s = State.createGame({ mode: 'normal', players: players4(), startColor: 'red' });
+  const openingSeq = [];
+  for (let i = 0; i < 4; i++) {
+    openingSeq.push(State.getTurnInfo(s).color);
+    s = placeOne(s, 'one');
+  }
+  assert.deepStrictEqual(openingSeq, ['red', 'green', 'blue', 'yellow']);
+  assert.strictEqual(s.phase, 'playing');
+  const playingSeq = [];
+  for (let i = 0; i < 4; i++) {
+    playingSeq.push(State.getTurnInfo(s).color);
+    s = placeOne(s);
+  }
+  assert.deepStrictEqual(playingSeq, ['red', 'green', 'blue', 'yellow'], 'playing も開始色から巡回する');
+});
+
+test('開始色：赤・緑スタートでもフルゲームが完走し不変条件が保たれる', () => {
+  ['red', 'green'].forEach(startColor => {
+    let s = State.createGame({ mode: 'normal', players: players4(), startColor });
+    let guard = 0;
+    while (s.phase !== 'finished' && guard++ < 500) {
+      const moves = State.legalMovesForTurn(s);
+      if (moves.length > 0) {
+        const m = moves[0];
+        s = applyOk(s, { type: 'place', pieceId: m.pieceId, variantIndex: m.variantIndex, origin: m.origin });
+      } else {
+        s = applyOk(s, { type: 'pass' });
+      }
+    }
+    assert.strictEqual(s.phase, 'finished', startColor + ' スタートで終了すること');
+    assert.ok(s.results);
+    Logic.TURN_ORDER.forEach(color => {
+      let onBoard = 0;
+      s.board.forEach(row => row.forEach(cell => { if (cell === color) onBoard++; }));
+      assert.strictEqual(onBoard + Logic.remainingSquares(s.hands[color]), 89, color + ' のマス数保存');
+    });
+  });
+});
+
+test('開始色：魔法使いモードでも開始色から始まりカードステップになる', () => {
+  const s = afterOpening({ mode: 'wizard', players: players4(), rng: makeRng(99), startColor: 'green' });
+  assert.strictEqual(s.startColor, 'green');
+  const info = State.getTurnInfo(s);
+  assert.strictEqual(info.color, 'green');
+  assert.strictEqual(info.step, 'card');
 });
 
 console.log('state.test.js: ' + passed + ' tests passed');
